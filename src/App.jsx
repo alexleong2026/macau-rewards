@@ -1,5 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Landmark, Smartphone, Gift, TrendingUp, X, Award, AlertCircle, PieChart as PieChartIcon, List, ChevronLeft, ChevronRight, Wallet, Sparkles } from 'lucide-react';
+
+// 引入 Firebase 雲端儲存套件
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
+
+// 初始化 Firebase (建立雲端連線)
+const firebaseConfig = {
+  apiKey: "AIzaSyBeJPzPa37CsIHlMsBGkFgwKt3OEBk47tw",
+  authDomain: "macau-rewards-2026-378de.firebaseapp.com",
+  projectId: "macau-rewards-2026-378de",
+  storageBucket: "macau-rewards-2026-378de.firebasestorage.app",
+  messagingSenderId: "678291549394",
+  appId: "1:678291549394:web:945ebfb08a7cf66bab910b"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = 'macau-rewards-2026-378de'; // 給自己取一個固定的 ID
 
 // 定義所有的支付方式
 const PAYMENT_METHODS = [
@@ -74,6 +94,49 @@ export default function App() {
   const [records, setRecords] = useState(initialRecords);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [activeTab, setActiveTab] = useState('records');
+  const [user, setUser] = useState(null); // 記錄使用者狀態
+
+  // 1. 初始化使用者驗證 (確保您的資料具有獨立隱私空間)
+  useEffect(() => {
+    if (!auth) return;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          try {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } catch (tokenError) {
+            console.warn("自訂權杖不匹配，自動切換為匿名登入", tokenError);
+            await signInAnonymously(auth);
+          }
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("登入初始化失敗:", error);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // 2. 當進入網頁時，自動從雲端資料庫讀取您之前的紀錄
+  useEffect(() => {
+    if (!user || !db) return;
+    
+    // 設定雲端儲存路徑
+    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata');
+
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists() && docSnap.data().records) {
+        setRecords(docSnap.data().records);
+      }
+    }, (error) => {
+      console.error("讀取雲端資料失敗:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // 定義點擊切換的金額順序 (null 代表 N/A)
   const AMOUNT_CYCLE = [null, 0, 10, 20, 50, 100, 200];
@@ -142,7 +205,7 @@ export default function App() {
   };
 
   // 處理點擊格子直接切換金額
-  const handleAmountClick = (method, index, currentAmount) => {
+  const handleAmountClick = async (method, index, currentAmount) => {
     // 找出當前金額在循環陣列中的位置，並計算下一個位置
     const currentIndex = AMOUNT_CYCLE.indexOf(currentAmount);
     const nextIndex = (currentIndex + 1) % AMOUNT_CYCLE.length;
@@ -153,7 +216,18 @@ export default function App() {
     newRecords[currentWeek][method] = [...newRecords[currentWeek][method]];
     newRecords[currentWeek][method][index] = nextAmount;
     
+    // 優先更新畫面，讓操作順暢不卡頓
     setRecords(newRecords);
+
+    // 3. 畫面更新後，立刻將新資料同步寫入雲端資料庫
+    if (user && db) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata');
+        await setDoc(docRef, { records: newRecords });
+      } catch (error) {
+        console.error("儲存雲端資料失敗:", error);
+      }
+    }
   };
 
   return (
