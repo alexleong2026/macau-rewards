@@ -88,10 +88,12 @@ export default function App() {
     }));
   });
 
-  const pieData = Object.entries(amountCounts)
+  // 獨立出「所有統計數據(供列表顯示)」與「圓餅圖數據(過濾掉0次)」
+  const allStatsData = Object.entries(amountCounts)
     .map(([amount, count]) => ({ amount: Number(amount), count, color: AMOUNT_COLORS[amount] || '#ccc' }))
-    .filter(item => item.count > 0)
     .sort((a, b) => a.amount - b.amount);
+
+  const pieData = allStatsData.filter(item => item.count > 0);
 
   const renderPieChart = () => {
     if (totalCount === 0) return <div className="h-24 flex items-center justify-center text-slate-400 text-xs font-medium">暫無數據</div>;
@@ -178,8 +180,8 @@ export default function App() {
             <h2 className="text-sm font-bold text-center mb-1 flex items-center justify-center gap-2"><PieChartIcon className="w-4 h-4 text-rose-500" /> 金額概率分佈</h2>
             <div className="py-2">{renderPieChart()}</div>
             <div className="space-y-2 mt-2">
-              {pieData.map(item => {
-                const percentage = ((item.count / totalCount) * 100).toFixed(1);
+              {allStatsData.map(item => {
+                const percentage = totalCount > 0 ? ((item.count / totalCount) * 100).toFixed(1) : '0.0';
                 return (
                   <div key={item.amount} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2.5">
