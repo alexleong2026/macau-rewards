@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Landmark, Smartphone, Gift, TrendingUp, X, Award, AlertCircle, PieChart as PieChartIcon, List, ChevronLeft, ChevronRight, Wallet, Sparkles } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -37,7 +37,6 @@ const getMethodIcon = (m) => {
 };
 
 export default function App() {
-  // 生成純淨的初始數據（全部為 null）
   const createEmptyRecords = () => {
     const recs = {};
     WEEKS.forEach(w => {
@@ -52,6 +51,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('records');
   const [user, setUser] = useState(null);
 
+  // 長按偵測工具
+  const timerRef = useRef(null);
+  const isLongPress = useRef(false);
+
   useEffect(() => {
     signInAnonymously(auth).catch(console.error);
     return onAuthStateChanged(auth, setUser);
@@ -64,12 +67,51 @@ export default function App() {
     });
   }, [user]);
 
-  const handleAmountClick = async (method, index, currentAmount) => {
-    const nextAmount = AMOUNT_CYCLE[(AMOUNT_CYCLE.indexOf(currentAmount) + 1) % AMOUNT_CYCLE.length];
+  // 解析資料，判斷是否為「已使用狀態」
+  const parseValue = (val) => {
+    if (val === null) return { amount: null, used: false };
+    if (typeof val === 'string' && val.includes('_used')) {
+      return { amount: parseInt(val), used: true };
+    }
+    return { amount: Number(val), used: false };
+  };
+
+  const updateRecord = async (method, index, newValue) => {
     const newRecords = { ...records, [currentWeek]: { ...records[currentWeek], [method]: [...records[currentWeek][method]] } };
-    newRecords[currentWeek][method][index] = nextAmount;
+    newRecords[currentWeek][method][index] = newValue;
     setRecords(newRecords);
     if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords });
+  };
+
+  const startPress = (method, index, currentValue) => {
+    isLongPress.current = false;
+    const parsed = parseValue(currentValue);
+    if (parsed.amount === null) return; // N/A 不處理長按
+    
+    // 設定 500 毫秒的長按計時器
+    timerRef.current = setTimeout(() => {
+      isLongPress.current = true;
+      const newValue = parsed.used ? parsed.amount : `${parsed.amount}_used`;
+      updateRecord(method, index, newValue);
+    }, 500);
+  };
+
+  const clearPress = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  const handleAmountClick = (method, index, currentValue) => {
+    if (isLongPress.current) return; // 如果剛剛觸發了長按，則忽略這次點擊
+    
+    const parsed = parseValue(currentValue);
+    if (parsed.used) {
+      // 點擊深灰色按鈕：回復成未使用的粉紅色狀態
+      updateRecord(method, index, parsed.amount);
+    } else {
+      // 點擊粉紅色/一般按鈕：正常切換金額
+      const nextAmount = AMOUNT_CYCLE[(AMOUNT_CYCLE.indexOf(parsed.amount) + 1) % AMOUNT_CYCLE.length];
+      updateRecord(method, index, nextAmount);
+    }
   };
 
   // 計算邏輯
@@ -77,18 +119,19 @@ export default function App() {
   const institutionTotals = {};
   const amountCounts = { 0: 0, 10: 0, 20: 0, 50: 0, 100: 0, 200: 0 };
   PAYMENT_METHODS.forEach(m => institutionTotals[m] = 0);
+  
   Object.values(records).forEach(week => {
     PAYMENT_METHODS.forEach(m => week[m]?.forEach(v => {
-      if (v !== null) { 
-        totalAmount += v; 
+      const parsed = parseValue(v);
+      if (parsed.amount !== null) { 
+        totalAmount += parsed.amount; 
         totalCount++; 
-        institutionTotals[m] += v; 
-        amountCounts[v] = (amountCounts[v] || 0) + 1;
+        institutionTotals[m] += parsed.amount; 
+        amountCounts[parsed.amount] = (amountCounts[parsed.amount] || 0) + 1;
       }
     }));
   });
 
-  // 獨立出「所有統計數據(供列表顯示)」與「圓餅圖數據(過濾掉0次)」
   const allStatsData = Object.entries(amountCounts)
     .map(([amount, count]) => ({ amount: Number(amount), count, color: AMOUNT_COLORS[amount] || '#ccc' }))
     .sort((a, b) => a.amount - b.amount);
@@ -147,7 +190,7 @@ export default function App() {
             </div>
             <div className="space-y-2.5">
               {PAYMENT_METHODS.map(m => {
-                const weekTotal = records[currentWeek][m]?.reduce((a, b) => a + (b || 0), 0) || 0;
+                const weekTotal = records[currentWeek][m]?.reduce((a, b) => a + (parseValue(b).amount || 0), 0) || 0;
                 const consumeTotal = weekTotal * 3;
                 return (
                   <div key={m} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3">
@@ -157,9 +200,35 @@ export default function App() {
                       <div className="text-[11px] font-semibold text-slate-400 text-right">消費: <span className="text-blue-600 font-bold">{consumeTotal}</span></div>
                     </div>
                     <div className="flex gap-2">
-                      {records[currentWeek][m]?.map((v, i) => (
-                        <button key={i} onClick={() => handleAmountClick(m, i, v)} className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-all active:scale-95 ${v === null ? 'bg-slate-50 text-slate-400 border-dashed border-slate-200' : v === 0 ? 'bg-slate-100 text-slate-500' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>{v === null ? 'N/A' : v}</button>
-                      ))}
+                      {records[currentWeek][m]?.map((v, i) => {
+                        const parsed = parseValue(v);
+                        
+                        // 動態決定按鈕顏色
+                        let btnClass = 'flex-1 py-1.5 rounded-xl text-sm font-bold border transition-all active:scale-95 touch-manipulation select-none ';
+                        if (parsed.amount === null) btnClass += 'bg-slate-50 text-slate-400 border-dashed border-slate-200';
+                        else if (parsed.used) btnClass += 'bg-slate-500 text-white border-slate-600 shadow-inner'; // 已使用：深灰色
+                        else if (parsed.amount === 0) btnClass += 'bg-slate-100 text-slate-500 border-slate-200';
+                        else btnClass += 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm';
+
+                        return (
+                          <button
+                            key={i}
+                            onPointerDown={(e) => {
+                              if (e.pointerType === 'mouse' && e.button !== 0) return;
+                              startPress(m, i, v);
+                            }}
+                            onPointerUp={clearPress}
+                            onPointerLeave={clearPress}
+                            onPointerCancel={clearPress}
+                            onContextMenu={(e) => e.preventDefault()} // 防止手機長按跳出選單
+                            onClick={() => handleAmountClick(m, i, v)}
+                            className={btnClass}
+                            style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+                          >
+                            {parsed.amount === null ? 'N/A' : parsed.amount}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 );
