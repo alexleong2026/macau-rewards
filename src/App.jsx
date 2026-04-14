@@ -146,19 +146,24 @@ export default function App() {
               <button onClick={() => setCurrentWeek(w => Math.min(10, w + 1))} disabled={currentWeek === 10} className="w-8 h-8 flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
             </div>
             <div className="space-y-2.5">
-              {PAYMENT_METHODS.map(m => (
-                <div key={m} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3">
-                  <div className="flex justify-between items-center mb-2 px-1">
-                    <div className="flex items-center gap-2 font-bold text-sm text-slate-700">{getMethodIcon(m)}<span>{m}</span></div>
-                    <div className="text-[11px] font-semibold text-slate-400">本週: <span className="text-rose-500">{records[currentWeek][m]?.reduce((a, b) => a + (b || 0), 0)}</span></div>
+              {PAYMENT_METHODS.map(m => {
+                const weekTotal = records[currentWeek][m]?.reduce((a, b) => a + (b || 0), 0) || 0;
+                const consumeTotal = weekTotal * 3;
+                return (
+                  <div key={m} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3">
+                    <div className="grid grid-cols-3 items-center mb-2 px-1">
+                      <div className="flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start">{getMethodIcon(m)}<span className="truncate">{m}</span></div>
+                      <div className="text-[11px] font-semibold text-slate-400 text-center">本週: <span className="text-rose-500">{weekTotal}</span></div>
+                      <div className="text-[11px] font-semibold text-slate-400 text-right">消費: <span className="text-blue-600 font-bold">{consumeTotal}</span></div>
+                    </div>
+                    <div className="flex gap-2">
+                      {records[currentWeek][m]?.map((v, i) => (
+                        <button key={i} onClick={() => handleAmountClick(m, i, v)} className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-all active:scale-95 ${v === null ? 'bg-slate-50 text-slate-400 border-dashed border-slate-200' : v === 0 ? 'bg-slate-100 text-slate-500' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>{v === null ? 'N/A' : v}</button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    {records[currentWeek][m]?.map((v, i) => (
-                      <button key={i} onClick={() => handleAmountClick(m, i, v)} className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-all active:scale-95 ${v === null ? 'bg-slate-50 text-slate-400 border-dashed border-slate-200' : v === 0 ? 'bg-slate-100 text-slate-500' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>{v === null ? 'N/A' : v}</button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
