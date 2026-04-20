@@ -22,6 +22,13 @@ const appId = 'macau-rewards-2026-378de';
 const PAYMENT_METHODS = ['工商銀行', '中國銀行', '國際銀行', 'MPay', 'UePay', '支付寶', '豐付寶', '廣發銀行'];
 const AMOUNT_CYCLE = [null, 0, 10, 20, 50, 100, 200];
 const AMOUNT_COLORS = { 0: '#e5e7eb', 10: '#93c5fd', 20: '#86efac', 50: '#fde047', 100: '#fca5a5', 200: '#d8b4fe' };
+const AMOUNT_CLASSES = {
+  10: 'bg-blue-50 text-blue-600 border-blue-200 shadow-sm',
+  20: 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm',
+  50: 'bg-amber-50 text-amber-600 border-amber-300 shadow-sm',
+  100: 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm',
+  200: 'bg-purple-50 text-purple-600 border-purple-200 shadow-sm'
+};
 const WEEKS = [
   { id: 1, label: '第 1 週', date: '10/4 - 16/4' }, { id: 2, label: '第 2 週', date: '17/4 - 23/4' },
   { id: 3, label: '第 3 週', date: '24/4 - 30/4' }, { id: 4, label: '第 4 週', date: '1/5 - 7/5' },
@@ -30,10 +37,45 @@ const WEEKS = [
   { id: 9, label: '第 9 週', date: '5/6 - 11/6' }, { id: 10, label: '第 10 週', date: '12/6 - 18/6' }
 ];
 
+// 新增：根據當前日期自動計算對應的週次
+const getAutoWeekId = () => {
+  const now = new Date();
+  const currentYear = 2026; // 活動年份為 2026
+
+  for (const week of WEEKS) {
+    const [startStr, endStr] = week.date.split(' - ');
+    
+    // 解析開始日期 (DD/MM)
+    const [startDay, startMonth] = startStr.split('/');
+    const startDate = new Date(currentYear, parseInt(startMonth) - 1, parseInt(startDay), 0, 0, 0);
+    
+    // 解析結束日期 (DD/MM)
+    const [endDay, endMonth] = endStr.split('/');
+    const endDate = new Date(currentYear, parseInt(endMonth) - 1, parseInt(endDay), 23, 59, 59);
+
+    // 檢查今天是否在此區間內
+    if (now >= startDate && now <= endDate) {
+      return week.id;
+    }
+  }
+  
+  // 如果還沒開始，預設第一週；如果已結束，停在最後一週
+  const firstStartDate = new Date(currentYear, 4 - 1, 10); // 4月10日
+  if (now < firstStartDate) return 1;
+  return 10;
+};
+
 const getMethodIcon = (m) => {
   if (m.includes('銀行')) return <Landmark className="w-4 h-4 text-blue-500" />;
   if (m.includes('Pay') || m.includes('付寶')) return <Smartphone className="w-4 h-4 text-emerald-500" />;
   return <Award className="w-4 h-4 text-amber-500" />;
+};
+
+// 新增：震動回饋小工具 (支援的設備上會有觸覺回饋)
+const triggerVibration = (pattern) => {
+  if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate(pattern);
+  }
 };
 
 export default function App() {
@@ -47,7 +89,8 @@ export default function App() {
   };
 
   const [records, setRecords] = useState(createEmptyRecords());
-  const [currentWeek, setCurrentWeek] = useState(1);
+  // 變更：將原本固定初始化的 1，改為執行自動偵測函數
+  const [currentWeek, setCurrentWeek] = useState(() => getAutoWeekId());
   const [activeTab, setActiveTab] = useState('records');
   const [user, setUser] = useState(null);
 
@@ -83,6 +126,13 @@ export default function App() {
     if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords });
   };
 
+  // 新增：用於一次更新多筆紀錄的函式
+  const updateGroupRecord = async (method, newValues) => {
+    const newRecords = { ...records, [currentWeek]: { ...records[currentWeek], [method]: newValues } };
+    setRecords(newRecords);
+    if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords });
+  };
+
   const startPress = (method, index, currentValue) => {
     isLongPress.current = false;
     const parsed = parseValue(currentValue);
@@ -91,8 +141,32 @@ export default function App() {
     // 設定 500 毫秒的長按計時器
     timerRef.current = setTimeout(() => {
       isLongPress.current = true;
+      triggerVibration([50, 50]); // 長按成功時產生特殊的雙震動
       const newValue = parsed.used ? parsed.amount : `${parsed.amount}_used`;
       updateRecord(method, index, newValue);
+    }, 500);
+  };
+
+  // 新增：機構名稱的群組長按偵測
+  const startGroupPress = (method) => {
+    isLongPress.current = false;
+    
+    timerRef.current = setTimeout(() => {
+      isLongPress.current = true;
+      triggerVibration([40, 40, 40]); // 一次核銷多個時產生專屬三連震
+      
+      const currentValues = records[currentWeek][method];
+      const parsedValues = currentValues.map(parseValue);
+      
+      // 檢查是否還有尚未核銷的有效金額 (大於 0 的金額)
+      const hasUnused = parsedValues.some(p => p.amount !== null && p.amount > 0 && !p.used);
+      
+      const newValues = parsedValues.map(p => {
+        if (p.amount === null || p.amount === 0) return p.amount; // 略過 N/A 和 0
+        return hasUnused ? `${p.amount}_used` : p.amount; // 一鍵全核銷或一鍵全復原
+      });
+      
+      updateGroupRecord(method, newValues);
     }, 500);
   };
 
@@ -103,6 +177,8 @@ export default function App() {
   const handleAmountClick = (method, index, currentValue) => {
     if (isLongPress.current) return; // 如果剛剛觸發了長按，則忽略這次點擊
     
+    triggerVibration(30); // 輕觸時產生短促的單震動
+
     const parsed = parseValue(currentValue);
     if (parsed.used) {
       // 點擊深灰色按鈕：回復成未使用的粉紅色狀態
@@ -116,6 +192,7 @@ export default function App() {
 
   // 計算邏輯
   let totalAmount = 0, totalCount = 0;
+  let currentWeekTotalAmount = 0;
   const institutionTotals = {};
   const amountCounts = { 0: 0, 10: 0, 20: 0, 50: 0, 100: 0, 200: 0 };
   PAYMENT_METHODS.forEach(m => institutionTotals[m] = 0);
@@ -131,6 +208,18 @@ export default function App() {
       }
     }));
   });
+
+  // 計算本週總計與本週消費金額
+  if (records[currentWeek]) {
+    PAYMENT_METHODS.forEach(m => records[currentWeek][m]?.forEach(v => {
+      const parsed = parseValue(v);
+      if (parsed.amount !== null) {
+        currentWeekTotalAmount += parsed.amount;
+      }
+    }));
+  }
+  const currentWeekConsumeAmount = currentWeekTotalAmount * 3;
+  const totalConsumeAmount = totalAmount * 3; // 新增計算：總消費金額
 
   const allStatsData = Object.entries(amountCounts)
     .map(([amount, count]) => ({ amount: Number(amount), count, color: AMOUNT_COLORS[amount] || '#ccc' }))
@@ -163,30 +252,66 @@ export default function App() {
   return (
     <div className="h-[100dvh] w-full max-w-md mx-auto bg-slate-50 text-slate-800 font-sans flex flex-col overflow-hidden select-none">
       <main className="flex-1 overflow-y-auto p-3 space-y-4 pb-20 scroll-smooth">
-        <header className="flex items-center justify-center gap-2 pt-1">
-          <div className="bg-gradient-to-tr from-rose-500 to-red-500 p-1.5 rounded-xl shadow-sm"><Gift className="w-4 h-4 text-white" /></div>
-          <h1 className="text-lg font-black tracking-wide">澳門消費大獎賞 2026</h1>
+        <header className="flex flex-col items-center justify-center pt-1">
+          <div className="flex items-center gap-2">
+            <div className="bg-gradient-to-tr from-rose-500 to-red-500 p-1.5 rounded-xl shadow-sm"><Gift className="w-4 h-4 text-white" /></div>
+            <h1 className="text-lg font-black tracking-wide">澳門消費大獎賞 2026</h1>
+          </div>
+          <div className="text-[11px] text-slate-400 font-medium mt-0.5 tracking-widest">@yalex2026</div>
         </header>
 
-        <div className="bg-gradient-to-br from-rose-500 via-red-500 to-red-600 rounded-2xl p-4 shadow-md text-white relative overflow-hidden">
-          <div className="relative z-10 flex items-end justify-between gap-2">
-            <div>
-              <p className="text-red-100 font-medium text-xs flex items-center gap-1 mb-0.5"><TrendingUp className="w-3.5 h-3.5" /> 總中獎金額</p>
-              <div className="flex items-baseline gap-1"><span className="text-lg font-bold opacity-90">MOP</span><span className="text-3xl font-black">{totalAmount.toFixed(1)}</span></div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-xl px-2.5 py-1.5 flex items-center gap-2 border border-white/10">
-              <div className="bg-white/20 rounded-full p-1"><Award className="w-3 h-3" /></div>
-              <div><p className="text-[9px] text-red-100 mb-0.5">總次數</p><p className="text-sm font-bold">{totalCount} 次</p></div>
+        {/* 動態切換顯示：記錄分頁顯示本週金額，機構分頁顯示總消費金額，統計分頁顯示總次數 */}
+        {activeTab === 'records' && (
+          <div className="bg-gradient-to-br from-rose-500 via-red-500 to-red-600 rounded-2xl p-4 shadow-md text-white relative overflow-hidden">
+            <div className="relative z-10 flex items-end justify-between gap-2">
+              <div>
+                <p className="text-red-100 font-medium text-xs flex items-center gap-1 mb-0.5"><TrendingUp className="w-3.5 h-3.5" /> 第 {currentWeek} 週中獎金額</p>
+                <div className="flex items-baseline gap-1"><span className="text-lg font-bold opacity-90">MOP</span><span className="text-3xl font-black">{currentWeekTotalAmount.toFixed(1)}</span></div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl px-2.5 py-1.5 flex items-center gap-2 border border-white/10">
+                <div className="bg-white/20 rounded-full p-1"><Wallet className="w-3 h-3" /></div>
+                <div><p className="text-[9px] text-red-100 mb-0.5">消費金額</p><p className="text-sm font-bold">MOP {currentWeekConsumeAmount}</p></div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === 'institutions' && (
+          <div className="bg-gradient-to-br from-rose-500 via-red-500 to-red-600 rounded-2xl p-4 shadow-md text-white relative overflow-hidden">
+            <div className="relative z-10 flex items-end justify-between gap-2">
+              <div>
+                <p className="text-red-100 font-medium text-xs flex items-center gap-1 mb-0.5"><TrendingUp className="w-3.5 h-3.5" /> 總中獎金額</p>
+                <div className="flex items-baseline gap-1"><span className="text-lg font-bold opacity-90">MOP</span><span className="text-3xl font-black">{totalAmount.toFixed(1)}</span></div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl px-3 py-2 flex items-center gap-2.5 border border-white/10">
+                <div className="bg-white/20 rounded-full p-1.5"><Wallet className="w-4 h-4" /></div>
+                <div><p className="text-[10px] text-red-100 mb-0.5 font-medium">總消費金額</p><p className="text-lg font-black tracking-tight">MOP {totalConsumeAmount}</p></div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'stats' && (
+          <div className="bg-gradient-to-br from-rose-500 via-red-500 to-red-600 rounded-2xl p-4 shadow-md text-white relative overflow-hidden">
+            <div className="relative z-10 flex items-end justify-between gap-2">
+              <div>
+                <p className="text-red-100 font-medium text-xs flex items-center gap-1 mb-0.5"><TrendingUp className="w-3.5 h-3.5" /> 總中獎金額</p>
+                <div className="flex items-baseline gap-1"><span className="text-lg font-bold opacity-90">MOP</span><span className="text-3xl font-black">{totalAmount.toFixed(1)}</span></div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl px-2.5 py-1.5 flex items-center gap-2 border border-white/10">
+                <div className="bg-white/20 rounded-full p-1"><Award className="w-3 h-3" /></div>
+                <div><p className="text-[9px] text-red-100 mb-0.5">總次數</p><p className="text-sm font-bold">{totalCount} 次</p></div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {activeTab === 'records' && (
           <div className="space-y-3">
             <div className="flex justify-between items-center bg-white p-1 rounded-full shadow-sm border border-slate-100">
-              <button onClick={() => setCurrentWeek(w => Math.max(1, w - 1))} disabled={currentWeek === 1} className="w-8 h-8 flex items-center justify-center disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+              <button onClick={() => { triggerVibration(20); setCurrentWeek(w => Math.max(1, w - 1)); }} disabled={currentWeek === 1} className="w-8 h-8 flex items-center justify-center disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
               <div className="text-center"><div className="font-bold text-xs">{WEEKS.find(w => w.id === currentWeek).label}</div><div className="text-[9px] text-slate-500">{WEEKS.find(w => w.id === currentWeek).date}</div></div>
-              <button onClick={() => setCurrentWeek(w => Math.min(10, w + 1))} disabled={currentWeek === 10} className="w-8 h-8 flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+              <button onClick={() => { triggerVibration(20); setCurrentWeek(w => Math.min(10, w + 1)); }} disabled={currentWeek === 10} className="w-8 h-8 flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
             </div>
             <div className="space-y-2.5">
               {PAYMENT_METHODS.map(m => {
@@ -195,7 +320,19 @@ export default function App() {
                 return (
                   <div key={m} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3">
                     <div className="grid grid-cols-3 items-center mb-2 px-1">
-                      <div className="flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start">{getMethodIcon(m)}<span className="truncate">{m}</span></div>
+                      <div 
+                        className="flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start cursor-pointer active:opacity-50 transition-opacity select-none touch-manipulation"
+                        onPointerDown={(e) => {
+                          if (e.pointerType === 'mouse' && e.button !== 0) return;
+                          startGroupPress(m);
+                        }}
+                        onPointerUp={clearPress}
+                        onPointerLeave={clearPress}
+                        onPointerCancel={clearPress}
+                        onContextMenu={(e) => e.preventDefault()}
+                      >
+                        {getMethodIcon(m)}<span className="truncate">{m}</span>
+                      </div>
                       <div className="text-[11px] font-semibold text-slate-400 text-center">本週: <span className="text-rose-500">{weekTotal}</span></div>
                       <div className="text-[11px] font-semibold text-slate-400 text-right">消費: <span className="text-blue-600 font-bold">{consumeTotal}</span></div>
                     </div>
@@ -208,7 +345,7 @@ export default function App() {
                         if (parsed.amount === null) btnClass += 'bg-slate-50 text-slate-400 border-dashed border-slate-200';
                         else if (parsed.used) btnClass += 'bg-slate-500 text-white border-slate-600 shadow-inner'; // 已使用：深灰色
                         else if (parsed.amount === 0) btnClass += 'bg-slate-100 text-slate-500 border-slate-200';
-                        else btnClass += 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm';
+                        else btnClass += AMOUNT_CLASSES[parsed.amount] || 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm';
 
                         return (
                           <button
@@ -276,7 +413,7 @@ export default function App() {
 
       <nav className="shrink-0 absolute bottom-0 w-full max-w-md bg-white/90 backdrop-blur-xl border-t p-1.5 flex justify-around">
         {[{ id: 'records', icon: List, label: '記錄' }, { id: 'institutions', icon: Wallet, label: '機構' }, { id: 'stats', icon: PieChartIcon, label: '統計' }].map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex flex-col items-center gap-1 w-20 py-1 transition-all ${activeTab === t.id ? 'text-rose-600' : 'text-slate-400'}`}>
+          <button key={t.id} onClick={() => { triggerVibration(20); setActiveTab(t.id); }} className={`flex flex-col items-center gap-1 w-20 py-1 transition-all ${activeTab === t.id ? 'text-rose-600' : 'text-slate-400'}`}>
             <t.icon className="w-5 h-5" /><span className="text-[10px] font-bold">{t.label}</span>
           </button>
         ))}
