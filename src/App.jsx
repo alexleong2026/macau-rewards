@@ -266,11 +266,11 @@ export default function App() {
             <div className="relative z-10 flex items-end justify-between gap-2">
               <div>
                 <p className="text-red-100 font-medium text-xs flex items-center gap-1 mb-0.5"><TrendingUp className="w-3.5 h-3.5" /> 第 {currentWeek} 週中獎金額</p>
-                <div className="flex items-baseline gap-1"><span className="text-lg font-bold opacity-90">MOP</span><span className="text-3xl font-black">{currentWeekTotalAmount.toFixed(1)}</span></div>
+                <div className="flex items-baseline gap-1"><span className="text-sm font-bold opacity-80">MOP</span><span className="text-3xl font-black">{currentWeekTotalAmount}</span></div>
               </div>
               <div className="bg-white/10 backdrop-blur-md rounded-xl px-2.5 py-1.5 flex items-center gap-2 border border-white/10">
                 <div className="bg-white/20 rounded-full p-1"><Wallet className="w-3 h-3" /></div>
-                <div><p className="text-[9px] text-red-100 mb-0.5">消費金額</p><p className="text-sm font-bold">MOP {currentWeekConsumeAmount}</p></div>
+                <div><p className="text-[9px] text-red-100 mb-0.5">消費金額</p><p className="text-sm font-bold"><span className="text-[10px] font-medium opacity-80 mr-0.5">MOP</span>{currentWeekConsumeAmount}</p></div>
               </div>
             </div>
           </div>
@@ -281,11 +281,10 @@ export default function App() {
             <div className="relative z-10 flex items-end justify-between gap-2">
               <div>
                 <p className="text-red-100 font-medium text-xs flex items-center gap-1 mb-0.5"><TrendingUp className="w-3.5 h-3.5" /> 總中獎金額</p>
-                <div className="flex items-baseline gap-1"><span className="text-lg font-bold opacity-90">MOP</span><span className="text-3xl font-black">{totalAmount.toFixed(1)}</span></div>
+                <div className="flex items-baseline gap-1"><span className="text-sm font-bold opacity-80">MOP</span><span className="text-3xl font-black">{totalAmount}</span></div>
               </div>
-              <div className="bg-white/10 backdrop-blur-md rounded-xl px-3 py-2 flex items-center gap-2.5 border border-white/10">
-                <div className="bg-white/20 rounded-full p-1.5"><Wallet className="w-4 h-4" /></div>
-                <div><p className="text-[10px] text-red-100 mb-0.5 font-medium">總消費金額</p><p className="text-lg font-black tracking-tight">MOP {totalConsumeAmount}</p></div>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl px-3 py-2 border border-white/10 text-right">
+                <div><p className="text-[10px] text-red-100 mb-0.5 font-medium">總消費金額</p><div className="flex items-baseline justify-end gap-1"><span className="text-xs font-bold opacity-80">MOP</span><span className="text-xl font-black tracking-tight">{totalConsumeAmount}</span></div></div>
               </div>
             </div>
           </div>
@@ -296,7 +295,7 @@ export default function App() {
             <div className="relative z-10 flex items-end justify-between gap-2">
               <div>
                 <p className="text-red-100 font-medium text-xs flex items-center gap-1 mb-0.5"><TrendingUp className="w-3.5 h-3.5" /> 總中獎金額</p>
-                <div className="flex items-baseline gap-1"><span className="text-lg font-bold opacity-90">MOP</span><span className="text-3xl font-black">{totalAmount.toFixed(1)}</span></div>
+                <div className="flex items-baseline gap-1"><span className="text-sm font-bold opacity-80">MOP</span><span className="text-3xl font-black">{totalAmount}</span></div>
               </div>
               <div className="bg-white/10 backdrop-blur-md rounded-xl px-2.5 py-1.5 flex items-center gap-2 border border-white/10">
                 <div className="bg-white/20 rounded-full p-1"><Award className="w-3 h-3" /></div>
