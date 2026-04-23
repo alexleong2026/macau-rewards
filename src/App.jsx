@@ -320,8 +320,10 @@ export default function App() {
             {/* 新增：核銷進度條 */}
             <div className="bg-white px-3.5 py-3 rounded-2xl shadow-sm border border-slate-100">
               <div className="flex justify-between items-end mb-2">
-                <span className="text-sm font-bold text-slate-800">使用本週中奬金額</span>
-                <span className="text-[10px] font-medium text-slate-400">
+                <span className="text-sm font-bold text-slate-800">
+                  未使用本週中奬金額 : <span className="text-rose-500">{currentWeekTotalAmount - currentWeekUsedAmount}</span>
+                </span>
+                <span className="text-[10px] font-medium text-slate-400 mb-0.5">
                   已使用 <span className="text-slate-700 font-bold text-xs">{currentWeekUsedAmount}</span> / {currentWeekTotalAmount}
                 </span>
               </div>
