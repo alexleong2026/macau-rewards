@@ -193,6 +193,7 @@ export default function App() {
   // 計算邏輯
   let totalAmount = 0, totalCount = 0;
   let currentWeekTotalAmount = 0;
+  let currentWeekUsedAmount = 0; // 新增：計算本週已使用的金額
   const institutionTotals = {};
   const amountCounts = { 0: 0, 10: 0, 20: 0, 50: 0, 100: 0, 200: 0 };
   PAYMENT_METHODS.forEach(m => institutionTotals[m] = 0);
@@ -209,17 +210,20 @@ export default function App() {
     }));
   });
 
-  // 計算本週總計與本週消費金額
+  // 計算本週總計、本週消費金額與本週已核銷金額
   if (records[currentWeek]) {
     PAYMENT_METHODS.forEach(m => records[currentWeek][m]?.forEach(v => {
       const parsed = parseValue(v);
       if (parsed.amount !== null) {
         currentWeekTotalAmount += parsed.amount;
+        if (parsed.used) {
+          currentWeekUsedAmount += parsed.amount;
+        }
       }
     }));
   }
   const currentWeekConsumeAmount = currentWeekTotalAmount * 3;
-  const totalConsumeAmount = totalAmount * 3; // 新增計算：總消費金額
+  const totalConsumeAmount = totalAmount * 3; 
 
   const allStatsData = Object.entries(amountCounts)
     .map(([amount, count]) => ({ amount: Number(amount), count, color: AMOUNT_COLORS[amount] || '#ccc' }))
@@ -312,6 +316,23 @@ export default function App() {
               <div className="text-center"><div className="font-bold text-xs">{WEEKS.find(w => w.id === currentWeek).label}</div><div className="text-[9px] text-slate-500">{WEEKS.find(w => w.id === currentWeek).date}</div></div>
               <button onClick={() => { triggerVibration(20); setCurrentWeek(w => Math.min(10, w + 1)); }} disabled={currentWeek === 10} className="w-8 h-8 flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
             </div>
+
+            {/* 新增：核銷進度條 */}
+            <div className="bg-white px-3.5 py-3 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-sm font-bold text-slate-800">使用本週中奬金額</span>
+                <span className="text-[10px] font-medium text-slate-400">
+                  已使用 <span className="text-slate-700 font-bold text-xs">{currentWeekUsedAmount}</span> / {currentWeekTotalAmount}
+                </span>
+              </div>
+              <div className="h-2 w-full bg-rose-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-slate-500 transition-all duration-500" 
+                  style={{ width: `${currentWeekTotalAmount > 0 ? (currentWeekUsedAmount / currentWeekTotalAmount) * 100 : 0}%` }}
+                ></div>
+              </div>
+            </div>
+
             <div className="space-y-2.5">
               {PAYMENT_METHODS.map(m => {
                 const weekTotal = records[currentWeek][m]?.reduce((a, b) => a + (parseValue(b).amount || 0), 0) || 0;
