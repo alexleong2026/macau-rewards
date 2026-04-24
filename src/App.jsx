@@ -37,30 +37,22 @@ const WEEKS = [
   { id: 9, label: '第 9 週', date: '5/6 - 11/6' }, { id: 10, label: '第 10 週', date: '12/6 - 18/6' }
 ];
 
-// 新增：根據當前日期自動計算對應的週次
+// 根據當前日期自動計算對應的週次
 const getAutoWeekId = () => {
   const now = new Date();
-  const currentYear = 2026; // 活動年份為 2026
+  const currentYear = 2026;
 
   for (const week of WEEKS) {
     const [startStr, endStr] = week.date.split(' - ');
-    
-    // 解析開始日期 (DD/MM)
     const [startDay, startMonth] = startStr.split('/');
     const startDate = new Date(currentYear, parseInt(startMonth) - 1, parseInt(startDay), 0, 0, 0);
-    
-    // 解析結束日期 (DD/MM)
     const [endDay, endMonth] = endStr.split('/');
     const endDate = new Date(currentYear, parseInt(endMonth) - 1, parseInt(endDay), 23, 59, 59);
 
-    // 檢查今天是否在此區間內
-    if (now >= startDate && now <= endDate) {
-      return week.id;
-    }
+    if (now >= startDate && now <= endDate) return week.id;
   }
   
-  // 如果還沒開始，預設第一週；如果已結束，停在最後一週
-  const firstStartDate = new Date(currentYear, 4 - 1, 10); // 4月10日
+  const firstStartDate = new Date(currentYear, 4 - 1, 10);
   if (now < firstStartDate) return 1;
   return 10;
 };
@@ -71,7 +63,6 @@ const getMethodIcon = (m) => {
   return <Award className="w-4 h-4 text-amber-500" />;
 };
 
-// 新增：震動回饋小工具 (支援的設備上會有觸覺回饋)
 const triggerVibration = (pattern) => {
   if (typeof window !== 'undefined' && 'vibrate' in navigator) {
     navigator.vibrate(pattern);
@@ -89,12 +80,10 @@ export default function App() {
   };
 
   const [records, setRecords] = useState(createEmptyRecords());
-  // 變更：將原本固定初始化的 1，改為執行自動偵測函數
   const [currentWeek, setCurrentWeek] = useState(() => getAutoWeekId());
   const [activeTab, setActiveTab] = useState('records');
   const [user, setUser] = useState(null);
 
-  // 長按偵測工具
   const timerRef = useRef(null);
   const isLongPress = useRef(false);
 
@@ -110,7 +99,6 @@ export default function App() {
     });
   }, [user]);
 
-  // 解析資料，判斷是否為「已使用狀態」
   const parseValue = (val) => {
     if (val === null) return { amount: null, used: false };
     if (typeof val === 'string' && val.includes('_used')) {
@@ -126,7 +114,6 @@ export default function App() {
     if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords });
   };
 
-  // 新增：用於一次更新多筆紀錄的函式
   const updateGroupRecord = async (method, newValues) => {
     const newRecords = { ...records, [currentWeek]: { ...records[currentWeek], [method]: newValues } };
     setRecords(newRecords);
@@ -136,34 +123,31 @@ export default function App() {
   const startPress = (method, index, currentValue) => {
     isLongPress.current = false;
     const parsed = parseValue(currentValue);
-    if (parsed.amount === null) return; // N/A 不處理長按
+    if (parsed.amount === null) return;
     
-    // 設定 500 毫秒的長按計時器
     timerRef.current = setTimeout(() => {
       isLongPress.current = true;
-      triggerVibration([50, 50]); // 長按成功時產生特殊的雙震動
+      triggerVibration([50, 50]);
       const newValue = parsed.used ? parsed.amount : `${parsed.amount}_used`;
       updateRecord(method, index, newValue);
     }, 500);
   };
 
-  // 新增：機構名稱的群組長按偵測
   const startGroupPress = (method) => {
     isLongPress.current = false;
     
     timerRef.current = setTimeout(() => {
       isLongPress.current = true;
-      triggerVibration([40, 40, 40]); // 一次核銷多個時產生專屬三連震
+      triggerVibration([40, 40, 40]);
       
       const currentValues = records[currentWeek][method];
       const parsedValues = currentValues.map(parseValue);
       
-      // 檢查是否還有尚未核銷的有效金額 (大於 0 的金額)
       const hasUnused = parsedValues.some(p => p.amount !== null && p.amount > 0 && !p.used);
       
       const newValues = parsedValues.map(p => {
-        if (p.amount === null || p.amount === 0) return p.amount; // 略過 N/A 和 0
-        return hasUnused ? `${p.amount}_used` : p.amount; // 一鍵全核銷或一鍵全復原
+        if (p.amount === null || p.amount === 0) return p.amount;
+        return hasUnused ? `${p.amount}_used` : p.amount;
       });
       
       updateGroupRecord(method, newValues);
@@ -175,16 +159,13 @@ export default function App() {
   };
 
   const handleAmountClick = (method, index, currentValue) => {
-    if (isLongPress.current) return; // 如果剛剛觸發了長按，則忽略這次點擊
-    
-    triggerVibration(30); // 輕觸時產生短促的單震動
+    if (isLongPress.current) return;
+    triggerVibration(30);
 
     const parsed = parseValue(currentValue);
     if (parsed.used) {
-      // 點擊深灰色按鈕：回復成未使用的粉紅色狀態
       updateRecord(method, index, parsed.amount);
     } else {
-      // 點擊粉紅色/一般按鈕：正常切換金額
       const nextAmount = AMOUNT_CYCLE[(AMOUNT_CYCLE.indexOf(parsed.amount) + 1) % AMOUNT_CYCLE.length];
       updateRecord(method, index, nextAmount);
     }
@@ -193,7 +174,7 @@ export default function App() {
   // 計算邏輯
   let totalAmount = 0, totalCount = 0;
   let currentWeekTotalAmount = 0;
-  let currentWeekUsedAmount = 0; // 新增：計算本週已使用的金額
+  let currentWeekUsedAmount = 0;
   const institutionTotals = {};
   const amountCounts = { 0: 0, 10: 0, 20: 0, 50: 0, 100: 0, 200: 0 };
   PAYMENT_METHODS.forEach(m => institutionTotals[m] = 0);
@@ -210,7 +191,6 @@ export default function App() {
     }));
   });
 
-  // 計算本週總計、本週消費金額與本週已核銷金額
   if (records[currentWeek]) {
     PAYMENT_METHODS.forEach(m => records[currentWeek][m]?.forEach(v => {
       const parsed = parseValue(v);
@@ -264,7 +244,6 @@ export default function App() {
           <div className="text-[11px] text-slate-400 font-medium mt-0.5 tracking-widest">@yalex2026</div>
         </header>
 
-        {/* 動態切換顯示：記錄分頁顯示本週金額，機構分頁顯示總消費金額，統計分頁顯示總次數 */}
         {activeTab === 'records' && (
           <div className="bg-gradient-to-br from-rose-500 via-red-500 to-red-600 rounded-2xl p-4 shadow-md text-white relative overflow-hidden">
             <div className="relative z-10 flex items-end justify-between gap-2">
@@ -317,7 +296,6 @@ export default function App() {
               <button onClick={() => { triggerVibration(20); setCurrentWeek(w => Math.min(10, w + 1)); }} disabled={currentWeek === 10} className="w-8 h-8 flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
             </div>
 
-            {/* 新增：核銷進度條 */}
             <div className="bg-white px-3.5 py-3 rounded-2xl shadow-sm border border-slate-100">
               <div className="flex justify-between items-end mb-2">
                 <span className="text-sm font-bold text-slate-800">
@@ -362,10 +340,9 @@ export default function App() {
                       {records[currentWeek][m]?.map((v, i) => {
                         const parsed = parseValue(v);
                         
-                        // 動態決定按鈕顏色
                         let btnClass = 'flex-1 py-1.5 rounded-xl text-sm font-bold border transition-all active:scale-95 touch-manipulation select-none ';
                         if (parsed.amount === null) btnClass += 'bg-slate-50 text-slate-400 border-dashed border-slate-200';
-                        else if (parsed.used) btnClass += 'bg-slate-500 text-white border-slate-600 shadow-inner'; // 已使用：深灰色
+                        else if (parsed.used) btnClass += 'bg-slate-500 text-white border-slate-600 shadow-inner';
                         else if (parsed.amount === 0) btnClass += 'bg-slate-100 text-slate-500 border-slate-200';
                         else btnClass += AMOUNT_CLASSES[parsed.amount] || 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm';
 
@@ -379,7 +356,7 @@ export default function App() {
                             onPointerUp={clearPress}
                             onPointerLeave={clearPress}
                             onPointerCancel={clearPress}
-                            onContextMenu={(e) => e.preventDefault()} // 防止手機長按跳出選單
+                            onContextMenu={(e) => e.preventDefault()}
                             onClick={() => handleAmountClick(m, i, v)}
                             className={btnClass}
                             style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
@@ -399,12 +376,51 @@ export default function App() {
         {activeTab === 'institutions' && (
           <div className="bg-white rounded-2xl p-4 space-y-2">
             <h2 className="text-sm font-bold text-center mb-2 flex items-center justify-center gap-2"><Wallet className="w-4 h-4 text-rose-500" /> 機構累計總額</h2>
-            {PAYMENT_METHODS.map(m => (
-              <div key={m} className="flex justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="flex items-center gap-2.5">{getMethodIcon(m)}<span className="font-bold text-slate-700 text-sm">{m}</span></div>
-                <div className="flex items-baseline gap-1"><span className="text-[10px] text-slate-400">MOP</span><span className="font-black text-base">{institutionTotals[m]}</span></div>
-              </div>
-            ))}
+            {PAYMENT_METHODS.map(m => {
+              // 獲取該機構過去10週的金額數據
+              const methodWeeklyTotals = WEEKS.map(w => records[w.id]?.[m]?.reduce((a, b) => a + (parseValue(b).amount || 0), 0) || 0);
+
+              return (
+                <div key={m} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  
+                  {/* 左側：機構名稱 */}
+                  <div className="flex items-center gap-2 w-24 shrink-0">
+                    {getMethodIcon(m)}
+                    <span className="font-bold text-slate-700 text-sm truncate">{m}</span>
+                  </div>
+
+                  {/* 中間：10 週走勢棒形圖 (改為絕對值高度) */}
+                  <div className="flex-1 flex justify-center px-1">
+                    <div className="flex items-end h-12 w-full max-w-[80px] gap-[1.5px] border-b border-rose-200 pb-[1px]">
+                      {methodWeeklyTotals.map((val, idx) => {
+                        const weekNum = idx + 1;
+                        const isCurrentWeek = weekNum === currentWeek;
+                        
+                        // 絕對值計算：例如 100元 = 15px高，最高不超過 48px 防止破版
+                        const absoluteHeight = Math.min(val * 0.15, 48); 
+                        
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex-1 rounded-t-[1px] transition-all duration-300 ${isCurrentWeek ? 'bg-rose-600' : (val > 0 ? 'bg-rose-300' : 'bg-transparent')}`}
+                            style={{ 
+                              height: `${absoluteHeight}px`, 
+                              minHeight: (val > 0 || isCurrentWeek) ? '2px' : '0' 
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 右側：累計總額 */}
+                  <div className="flex items-baseline justify-end gap-1 w-20 shrink-0">
+                    <span className="text-[10px] text-slate-400">MOP</span>
+                    <span className="font-black text-base">{institutionTotals[m]}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
