@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Landmark, Smartphone, Gift, TrendingUp, X, Award, AlertCircle, PieChart as PieChartIcon, List, ChevronLeft, ChevronRight, Wallet, Sparkles } from 'lucide-react';
+import { Landmark, Smartphone, Gift, TrendingUp, X, Award, AlertCircle, PieChart as PieChartIcon, List, ChevronLeft, ChevronRight, Wallet, Sparkles, Lock, Unlock } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -37,7 +37,6 @@ const WEEKS = [
   { id: 9, label: '第 9 週', date: '5/6 - 11/6' }, { id: 10, label: '第 10 週', date: '12/6 - 18/6' }
 ];
 
-// 根據當前日期自動計算對應的週次
 const getAutoWeekId = () => {
   const now = new Date();
   const currentYear = 2026;
@@ -80,6 +79,7 @@ export default function App() {
   };
 
   const [records, setRecords] = useState(createEmptyRecords());
+  const [locks, setLocks] = useState({}); // 新增：鎖定狀態的資料庫
   const [currentWeek, setCurrentWeek] = useState(() => getAutoWeekId());
   const [activeTab, setActiveTab] = useState('records');
   const [user, setUser] = useState(null);
@@ -95,7 +95,10 @@ export default function App() {
   useEffect(() => {
     if (!user || !db) return;
     return onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), (snap) => {
-      if (snap.exists() && snap.data().records) setRecords(snap.data().records);
+      if (snap.exists()) {
+        if (snap.data().records) setRecords(snap.data().records);
+        if (snap.data().locks) setLocks(snap.data().locks); // 讀取鎖定狀態
+      }
     });
   }, [user]);
 
@@ -107,17 +110,27 @@ export default function App() {
     return { amount: Number(val), used: false };
   };
 
+  // 儲存資料時加入 { merge: true } 避免覆蓋鎖定狀態
   const updateRecord = async (method, index, newValue) => {
     const newRecords = { ...records, [currentWeek]: { ...records[currentWeek], [method]: [...records[currentWeek][method]] } };
     newRecords[currentWeek][method][index] = newValue;
     setRecords(newRecords);
-    if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords });
+    if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords }, { merge: true });
   };
 
   const updateGroupRecord = async (method, newValues) => {
     const newRecords = { ...records, [currentWeek]: { ...records[currentWeek], [method]: newValues } };
     setRecords(newRecords);
-    if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords });
+    if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords }, { merge: true });
+  };
+
+  // 新增：切換鎖定狀態功能
+  const toggleLock = async (method) => {
+    triggerVibration(20);
+    const lockKey = `${currentWeek}-${method}`;
+    const newLocks = { ...locks, [lockKey]: !locks[lockKey] };
+    setLocks(newLocks);
+    if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { locks: newLocks }, { merge: true });
   };
 
   const startPress = (method, index, currentValue) => {
@@ -317,12 +330,19 @@ export default function App() {
               {PAYMENT_METHODS.map(m => {
                 const weekTotal = records[currentWeek][m]?.reduce((a, b) => a + (parseValue(b).amount || 0), 0) || 0;
                 const consumeTotal = weekTotal * 3;
+                
+                // 判斷該機構本週是否處於鎖定狀態
+                const isLocked = locks[`${currentWeek}-${m}`] || false;
+
                 return (
                   <div key={m} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3">
                     <div className="grid grid-cols-3 items-center mb-2 px-1">
+                      
+                      {/* 機構名稱（若鎖定則禁用群組長按功能） */}
                       <div 
-                        className="flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start cursor-pointer active:opacity-50 transition-opacity select-none touch-manipulation"
+                        className={`flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start select-none touch-manipulation ${isLocked ? 'opacity-40' : 'cursor-pointer active:opacity-50 transition-opacity'}`}
                         onPointerDown={(e) => {
+                          if (isLocked) return; // 鎖定狀態下禁止群組核銷
                           if (e.pointerType === 'mouse' && e.button !== 0) return;
                           startGroupPress(m);
                         }}
@@ -333,9 +353,21 @@ export default function App() {
                       >
                         {getMethodIcon(m)}<span className="truncate">{m}</span>
                       </div>
+                      
                       <div className="text-[11px] font-semibold text-slate-400 text-center">本週: <span className="text-rose-500">{weekTotal}</span></div>
-                      <div className="text-[11px] font-semibold text-slate-400 text-right">消費: <span className="text-blue-600 font-bold">{consumeTotal}</span></div>
+                      
+                      {/* 右側：消費金額與鎖定按鈕 (加大了 gap-3 間距) */}
+                      <div className="flex items-center justify-end gap-3">
+                        <div className="text-[11px] font-semibold text-slate-400 text-right">消費: <span className="text-blue-600 font-bold">{consumeTotal}</span></div>
+                        <button 
+                          onClick={() => toggleLock(m)} 
+                          className={`p-1 rounded-md transition-all active:scale-90 ${isLocked ? 'bg-red-50 text-red-700 border border-red-200 shadow-inner' : 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'}`}
+                        >
+                          {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
+
                     <div className="flex gap-2">
                       {records[currentWeek][m]?.map((v, i) => {
                         const parsed = parseValue(v);
@@ -346,10 +378,17 @@ export default function App() {
                         else if (parsed.amount === 0) btnClass += 'bg-slate-100 text-slate-500 border-slate-200';
                         else btnClass += AMOUNT_CLASSES[parsed.amount] || 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm';
 
+                        // 鎖定狀態下按鈕變淡且無法點擊
+                        if (isLocked) {
+                          btnClass += ' opacity-50 cursor-not-allowed';
+                        }
+
                         return (
                           <button
                             key={i}
+                            disabled={isLocked}
                             onPointerDown={(e) => {
+                              if (isLocked) return;
                               if (e.pointerType === 'mouse' && e.button !== 0) return;
                               startPress(m, i, v);
                             }}
@@ -357,7 +396,10 @@ export default function App() {
                             onPointerLeave={clearPress}
                             onPointerCancel={clearPress}
                             onContextMenu={(e) => e.preventDefault()}
-                            onClick={() => handleAmountClick(m, i, v)}
+                            onClick={() => {
+                              if (isLocked) return;
+                              handleAmountClick(m, i, v);
+                            }}
                             className={btnClass}
                             style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                           >
@@ -377,26 +419,20 @@ export default function App() {
           <div className="bg-white rounded-2xl p-4 space-y-2">
             <h2 className="text-sm font-bold text-center mb-2 flex items-center justify-center gap-2"><Wallet className="w-4 h-4 text-rose-500" /> 機構累計總額</h2>
             {PAYMENT_METHODS.map(m => {
-              // 獲取該機構過去10週的金額數據
               const methodWeeklyTotals = WEEKS.map(w => records[w.id]?.[m]?.reduce((a, b) => a + (parseValue(b).amount || 0), 0) || 0);
 
               return (
                 <div key={m} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  
-                  {/* 左側：機構名稱 */}
                   <div className="flex items-center gap-2 w-24 shrink-0">
                     {getMethodIcon(m)}
                     <span className="font-bold text-slate-700 text-sm truncate">{m}</span>
                   </div>
 
-                  {/* 中間：10 週走勢棒形圖 (改為絕對值高度) */}
                   <div className="flex-1 flex justify-center px-1">
                     <div className="flex items-end h-12 w-full max-w-[80px] gap-[1.5px] border-b border-rose-200 pb-[1px]">
                       {methodWeeklyTotals.map((val, idx) => {
                         const weekNum = idx + 1;
                         const isCurrentWeek = weekNum === currentWeek;
-                        
-                        // 絕對值計算：例如 100元 = 15px高，最高不超過 48px 防止破版
                         const absoluteHeight = Math.min(val * 0.15, 48); 
                         
                         return (
@@ -413,7 +449,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 右側：累計總額 */}
                   <div className="flex items-baseline justify-end gap-1 w-20 shrink-0">
                     <span className="text-[10px] text-slate-400">MOP</span>
                     <span className="font-black text-base">{institutionTotals[m]}</span>
