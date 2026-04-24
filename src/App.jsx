@@ -61,7 +61,17 @@ const getAutoWeekId = () => {
 // ==========================================
 const getMethodIcon = (m) => {
   if (m === '工商銀行') return <img src="/icons/icbc.png" alt="工商銀行" className="w-4 h-4 object-contain" />;
-  
+  if (m === '中國銀行') return <img src="/icons/boc.png" alt="中國銀行" className="w-4 h-4 object-contain" />;
+  if (m === '國際銀行') return <img src="/icons/xib.png" alt="國際銀行" className="w-4 h-4 object-contain" />;
+  if (m === 'MPay') return <img src="/icons/mpay.png" alt="MPay" className="w-4 h-4 object-contain" />;
+  if (m === 'UePay') return <img src="/icons/uepay.png" alt="Uepay" className="w-4 h-4 object-contain" />;
+  if (m === '支付寶') return <img src="/icons/alipay.png" alt="支付寶" className="w-4 h-4 object-contain" />;
+  if (m === '豐付寶') return <img src="/icons/taifung.png" alt="豐付寶" className="w-4 h-4 object-contain" />;
+  if (m === '廣發銀行') return <img src="/icons/cgb.png" alt="廣發銀行" className="w-4 h-4 object-contain" />;
+
+ 
+
+
   if (m.includes('銀行')) return <Landmark className="w-4 h-4 text-blue-500" />;
   if (m.includes('Pay') || m.includes('付寶')) return <Smartphone className="w-4 h-4 text-emerald-500" />;
   return <Award className="w-4 h-4 text-amber-500" />;
