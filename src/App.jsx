@@ -56,7 +56,12 @@ const getAutoWeekId = () => {
   return 10;
 };
 
+// ==========================================
+// 修改：替換工商銀行的專屬圖示
+// ==========================================
 const getMethodIcon = (m) => {
+  if (m === '工商銀行') return <img src="/icons/icbc.png" alt="工商銀行" className="w-4 h-4 object-contain" />;
+  
   if (m.includes('銀行')) return <Landmark className="w-4 h-4 text-blue-500" />;
   if (m.includes('Pay') || m.includes('付寶')) return <Smartphone className="w-4 h-4 text-emerald-500" />;
   return <Award className="w-4 h-4 text-amber-500" />;
@@ -79,7 +84,7 @@ export default function App() {
   };
 
   const [records, setRecords] = useState(createEmptyRecords());
-  const [locks, setLocks] = useState({}); // 新增：鎖定狀態的資料庫
+  const [locks, setLocks] = useState({});
   const [currentWeek, setCurrentWeek] = useState(() => getAutoWeekId());
   const [activeTab, setActiveTab] = useState('records');
   const [user, setUser] = useState(null);
@@ -97,7 +102,7 @@ export default function App() {
     return onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), (snap) => {
       if (snap.exists()) {
         if (snap.data().records) setRecords(snap.data().records);
-        if (snap.data().locks) setLocks(snap.data().locks); // 讀取鎖定狀態
+        if (snap.data().locks) setLocks(snap.data().locks);
       }
     });
   }, [user]);
@@ -110,7 +115,6 @@ export default function App() {
     return { amount: Number(val), used: false };
   };
 
-  // 儲存資料時加入 { merge: true } 避免覆蓋鎖定狀態
   const updateRecord = async (method, index, newValue) => {
     const newRecords = { ...records, [currentWeek]: { ...records[currentWeek], [method]: [...records[currentWeek][method]] } };
     newRecords[currentWeek][method][index] = newValue;
@@ -124,7 +128,6 @@ export default function App() {
     if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords }, { merge: true });
   };
 
-  // 新增：切換鎖定狀態功能
   const toggleLock = async (method) => {
     triggerVibration(20);
     const lockKey = `${currentWeek}-${method}`;
@@ -331,18 +334,16 @@ export default function App() {
                 const weekTotal = records[currentWeek][m]?.reduce((a, b) => a + (parseValue(b).amount || 0), 0) || 0;
                 const consumeTotal = weekTotal * 3;
                 
-                // 判斷該機構本週是否處於鎖定狀態
                 const isLocked = locks[`${currentWeek}-${m}`] || false;
 
                 return (
                   <div key={m} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3">
                     <div className="grid grid-cols-3 items-center mb-2 px-1">
                       
-                      {/* 機構名稱（若鎖定則禁用群組長按功能） */}
                       <div 
                         className={`flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start select-none touch-manipulation ${isLocked ? 'opacity-40' : 'cursor-pointer active:opacity-50 transition-opacity'}`}
                         onPointerDown={(e) => {
-                          if (isLocked) return; // 鎖定狀態下禁止群組核銷
+                          if (isLocked) return;
                           if (e.pointerType === 'mouse' && e.button !== 0) return;
                           startGroupPress(m);
                         }}
@@ -356,7 +357,6 @@ export default function App() {
                       
                       <div className="text-[11px] font-semibold text-slate-400 text-center">本週: <span className="text-rose-500">{weekTotal}</span></div>
                       
-                      {/* 右側：消費金額與鎖定按鈕 (加大了 gap-3 間距) */}
                       <div className="flex items-center justify-end gap-3">
                         <div className="text-[11px] font-semibold text-slate-400 text-right">消費: <span className="text-blue-600 font-bold">{consumeTotal}</span></div>
                         <button 
@@ -378,7 +378,6 @@ export default function App() {
                         else if (parsed.amount === 0) btnClass += 'bg-slate-100 text-slate-500 border-slate-200';
                         else btnClass += AMOUNT_CLASSES[parsed.amount] || 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm';
 
-                        // 鎖定狀態下按鈕變淡且無法點擊
                         if (isLocked) {
                           btnClass += ' opacity-50 cursor-not-allowed';
                         }
