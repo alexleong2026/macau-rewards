@@ -559,10 +559,10 @@ export default function App() {
                             </div>
                             {/* 中：折抵優惠券 */}
                             <div className="bg-blue-50 text-blue-600 px-2 py-1 rounded-md text-[10px] font-bold border border-blue-100 shadow-sm shrink-0">
-                              用券: -${step.discount}
+                              券: ${step.discount}
                             </div>
-                            {/* 右：總額 */}
-                            <div className="text-2xl font-black text-slate-800 text-right flex-1 truncate">
+                            {/* 右：總額 (字體縮小為 text-xl) */}
+                            <div className="text-xl font-black text-slate-800 text-right flex-1 truncate">
                               ${step.spend}
                             </div>
                           </div>
@@ -581,7 +581,8 @@ export default function App() {
                                 餘額直接支付
                               </div>
                             </div>
-                            <div className="text-2xl font-black text-slate-800 text-right shrink-0">
+                            {/* 總額 (字體縮小為 text-xl) */}
+                            <div className="text-xl font-black text-slate-800 text-right shrink-0">
                               ${calcResult.remainder}
                             </div>
                           </div>
