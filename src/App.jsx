@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Landmark, Smartphone, Gift, TrendingUp, X, Award, AlertCircle, PieChart as PieChartIcon, List, ChevronLeft, ChevronRight, Wallet, Sparkles, Lock, Unlock } from 'lucide-react';
+import { Landmark, Smartphone, Gift, TrendingUp, X, Award, AlertCircle, PieChart as PieChartIcon, List, ChevronLeft, ChevronRight, Wallet, Sparkles, Lock, Unlock, Calculator, CheckCircle2 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -57,24 +57,29 @@ const getAutoWeekId = () => {
 };
 
 // ==========================================
-// 修改：替換工商銀行的專屬圖示
+// 修改：替換所有機構的專屬圖示 (加入防長按下載處理)
 // ==========================================
 const getMethodIcon = (m) => {
-  if (m === '工商銀行') return <img src="/icons/icbc.png" alt="工商銀行" className="w-4 h-4 object-contain" />;
-  if (m === '中國銀行') return <img src="/icons/boc.png" alt="中國銀行" className="w-4 h-4 object-contain" />;
-  if (m === '國際銀行') return <img src="/icons/xib.png" alt="國際銀行" className="w-4 h-4 object-contain" />;
-  if (m === 'MPay') return <img src="/icons/mpay.png" alt="MPay" className="w-4 h-4 object-contain" />;
-  if (m === 'UePay') return <img src="/icons/uepay.png" alt="Uepay" className="w-4 h-4 object-contain" />;
-  if (m === '支付寶') return <img src="/icons/alipay.png" alt="支付寶" className="w-4 h-4 object-contain" />;
-  if (m === '豐付寶') return <img src="/icons/taifung.png" alt="豐付寶" className="w-4 h-4 object-contain" />;
-  if (m === '廣發銀行') return <img src="/icons/cgb.png" alt="廣發銀行" className="w-4 h-4 object-contain" />;
+  // 統一設定圖片的防呆屬性，徹底阻擋手機長按彈出下載選單
+  const imgProps = {
+    className: "w-4 h-4 object-contain pointer-events-none select-none",
+    draggable: false,
+    style: { WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }
+  };
 
- 
-
-
-  if (m.includes('銀行')) return <Landmark className="w-4 h-4 text-blue-500" />;
-  if (m.includes('Pay') || m.includes('付寶')) return <Smartphone className="w-4 h-4 text-emerald-500" />;
-  return <Award className="w-4 h-4 text-amber-500" />;
+  if (m === '工商銀行') return <img src="/icons/icbc.png" alt="工商銀行" {...imgProps} />;
+  if (m === '中國銀行') return <img src="/icons/boc.png" alt="中國銀行" {...imgProps} />;
+  if (m === '國際銀行') return <img src="/icons/xib.png" alt="國際銀行" {...imgProps} />;
+  if (m === 'MPay') return <img src="/icons/mpay.png" alt="MPay" {...imgProps} />;
+  if (m === 'UePay') return <img src="/icons/uepay.png" alt="Uepay" {...imgProps} />;
+  if (m === '支付寶') return <img src="/icons/alipay.png" alt="支付寶" {...imgProps} />;
+  if (m === '豐付寶') return <img src="/icons/taifung.png" alt="豐付寶" {...imgProps} />;
+  if (m === '廣發銀行') return <img src="/icons/cgb.png" alt="廣發銀行" {...imgProps} />;
+  
+  // 預設防呆機制 (萬一未來有新增其他機構)
+  if (m.includes('銀行')) return <Landmark className="w-4 h-4 text-blue-500 pointer-events-none" />;
+  if (m.includes('Pay') || m.includes('付寶')) return <Smartphone className="w-4 h-4 text-emerald-500 pointer-events-none" />;
+  return <Award className="w-4 h-4 text-amber-500 pointer-events-none" />;
 };
 
 const triggerVibration = (pattern) => {
@@ -98,6 +103,11 @@ export default function App() {
   const [currentWeek, setCurrentWeek] = useState(() => getAutoWeekId());
   const [activeTab, setActiveTab] = useState('records');
   const [user, setUser] = useState(null);
+
+  // 智能計算助手 State
+  const [calcAmount, setCalcAmount] = useState('');
+  const [calcResult, setCalcResult] = useState(null);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false); // 新增：用於控制確認對話框的顯示
 
   const timerRef = useRef(null);
   const isLongPress = useRef(false);
@@ -197,7 +207,186 @@ export default function App() {
     }
   };
 
+  // ==========================================
+  // 智能分單計算邏輯 (DP Knapsack)
+  // ==========================================
+  const handleAmountChange = (e) => {
+    setCalcAmount(e.target.value);
+    if (calcResult) setCalcResult(null);
+    setIsConfirmingPayment(false); // 重置確認狀態
+  };
+
+  const handleCalculate = () => {
+    triggerVibration(20);
+    setIsConfirmingPayment(false); // 重置確認狀態
+    const amount = parseInt(calcAmount);
+    if (!amount || amount <= 0) return;
+
+    // 取得指定 App 可用的所有最佳子集合 (Pareto-optimal)
+    const getAppStates = (method) => {
+      const unusedCoupons = records[currentWeek][method]
+        ?.map(parseValue)
+        .filter(p => p.amount !== null && !p.used && p.amount > 0)
+        .map(p => p.amount) || [];
+
+      const initialCount = unusedCoupons.length;
+      if (initialCount === 0) return [];
+
+      const subsets = [];
+      const n = initialCount;
+      for (let i = 0; i < (1 << n); i++) {
+        let val = 0, count = 0, coupons = [];
+        for (let j = 0; j < n; j++) {
+          if (i & (1 << j)) {
+            val += unusedCoupons[j];
+            count++;
+            coupons.push(unusedCoupons[j]);
+          }
+        }
+        subsets.push({ val, count, coupons, initialCount });
+      }
+
+      // 對於相同價值的組合，只保留「使用最少券數」的組合
+      const bestByVal = {};
+      for (const s of subsets) {
+        if (!bestByVal[s.val] || s.count < bestByVal[s.val].count) {
+          bestByVal[s.val] = s;
+        }
+      }
+      return Object.values(bestByVal);
+    };
+
+    const maxVal = Math.floor(amount / 3);
+    let dp = Array(maxVal + 1).fill(null);
+    dp[0] = { val: 0, appsUsed: 0, couponCount: 0, initialCountSum: 0, allocation: {} };
+
+    for (const method of PAYMENT_METHODS) {
+      // 修正：不再因為「鎖定」狀態而跳過該機構。
+      // (鎖定只是為了防 UI 誤觸，只要優惠券還沒「已核銷」，就應該納入計算)
+      // if (locks[`${currentWeek}-${method}`]) continue; <--- 已移除此限制
+
+      const states = getAppStates(method);
+      const newDp = [...dp];
+
+      for (let v = 0; v <= maxVal; v++) {
+        if (dp[v] !== null) {
+          for (const state of states) {
+            if (state.val === 0) continue;
+            const nextV = v + state.val;
+            
+            if (nextV <= maxVal) {
+              const nextApps = dp[v].appsUsed + 1;
+              const nextCoupons = dp[v].couponCount + state.count;
+              const nextInitialSum = dp[v].initialCountSum + state.initialCount; // 紀錄該 App 原本的剩餘券數
+
+              let better = false;
+              if (!newDp[nextV]) {
+                better = true;
+              } else {
+                const curr = newDp[nextV];
+                // 優先級 1：使用最少的 App 數量
+                if (nextApps < curr.appsUsed) {
+                  better = true;
+                } 
+                // 優先級 2：如果 App 數量一樣，使用最少張數的券
+                else if (nextApps === curr.appsUsed) {
+                  if (nextCoupons < curr.couponCount) {
+                    better = true;
+                  } 
+                  // 優先級 3：如果張數也一樣，優先使用「剩餘總券數較少」的 App (優先清空快用完的 App)
+                  else if (nextCoupons === curr.couponCount) {
+                    if (nextInitialSum < curr.initialCountSum) {
+                      better = true;
+                    }
+                  }
+                }
+              }
+
+              if (better) {
+                newDp[nextV] = {
+                  val: nextV,
+                  appsUsed: nextApps,
+                  couponCount: nextCoupons,
+                  initialCountSum: nextInitialSum,
+                  allocation: { ...dp[v].allocation, [method]: state }
+                };
+              }
+            }
+          }
+        }
+      }
+      dp = newDp;
+    }
+
+    // 尋找能達到最高優惠金額的組合
+    let best = null;
+    for (let v = maxVal; v > 0; v--) {
+      if (dp[v]) {
+        best = dp[v];
+        break;
+      }
+    }
+
+    // 產生建議步驟：現在餘額會被完全分離出來
+    const steps = [];
+    let remainder = amount;
+    
+    if (best) {
+      remainder = amount - (best.val * 3);
+      const apps = Object.keys(best.allocation);
+
+      apps.forEach((method) => {
+        const state = best.allocation[method];
+        const baseSpend = state.val * 3;
+        steps.push({
+          method,
+          spend: baseSpend, // 剛好等於觸發優惠的金額，不包含餘額
+          discount: state.val,
+          coupons: state.coupons
+        });
+      });
+    }
+
+    setCalcResult({ steps, totalDiscount: best ? best.val : 0, remainder });
+  };
+
+  const executePayment = async () => {
+    if (!calcResult || !calcResult.steps) return;
+    triggerVibration([50, 50, 50]);
+    setIsConfirmingPayment(false); // 執行後隱藏確認框
+
+    const nextWeekRecords = { ...records[currentWeek] };
+    
+    // 扣除優惠券
+    for (const step of calcResult.steps) {
+      const method = step.method;
+      let methodRecords = [...nextWeekRecords[method]];
+      const toConsume = [...step.coupons];
+
+      for (let i = 0; i < methodRecords.length; i++) {
+        const parsed = parseValue(methodRecords[i]);
+        if (parsed.amount !== null && !parsed.used && parsed.amount > 0) {
+          const idx = toConsume.indexOf(parsed.amount);
+          if (idx !== -1) {
+            methodRecords[i] = `${parsed.amount}_used`;
+            toConsume.splice(idx, 1);
+          }
+        }
+      }
+      nextWeekRecords[method] = methodRecords;
+    }
+
+    const newRecords = { ...records, [currentWeek]: nextWeekRecords };
+    setRecords(newRecords);
+    if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'macauRecords', 'mydata'), { records: newRecords }, { merge: true });
+
+    setCalcAmount('');
+    setCalcResult({ success: '支付完成！相關優惠券已自動核銷。' });
+  };
+
+  // ==========================================
   // 計算邏輯
+  // ==========================================
   let totalAmount = 0, totalCount = 0;
   let currentWeekTotalAmount = 0;
   let currentWeekUsedAmount = 0;
@@ -265,7 +454,7 @@ export default function App() {
         <header className="flex flex-col items-center justify-center pt-1">
           <div className="flex items-center gap-2">
             <div className="bg-gradient-to-tr from-rose-500 to-red-500 p-1.5 rounded-xl shadow-sm"><Gift className="w-4 h-4 text-white" /></div>
-            <h1 className="text-lg font-black tracking-wide">澳門消費大獎賞 2026</h1>
+            <h1 className="text-lg font-black tracking-wide">消費大獎賞智能助手</h1>
           </div>
           <div className="text-[11px] text-slate-400 font-medium mt-0.5 tracking-widest">@yalex2026</div>
         </header>
@@ -314,6 +503,129 @@ export default function App() {
           </div>
         )}
 
+        {/* ========================================== */}
+        {/* 計算助手頁面 UI                             */}
+        {/* ========================================== */}
+        {activeTab === 'calculator' && (
+          <div className="bg-white rounded-2xl p-5 space-y-4 shadow-sm border border-slate-100">
+            <div className="mb-2">
+              <h2 className="text-lg font-black text-slate-800">智能分單助手</h2>
+              <p className="text-xs font-medium text-slate-400 mt-0.5">完美解決多 App 拆單煩惱</p>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-600 ml-1">請輸入本次預計消費總額 (MOP)</label>
+              <div className="relative flex items-center">
+                <span className="absolute left-4 text-slate-400 font-bold text-xl">$</span>
+                <input
+                  type="number"
+                  value={calcAmount}
+                  onChange={handleAmountChange}
+                  placeholder="0"
+                  className="w-full pl-9 pr-4 py-3 rounded-xl border-2 border-blue-500 text-2xl font-black text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                />
+              </div>
+              <button
+                onClick={handleCalculate}
+                className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Calculator className="w-5 h-5" /> 開始智能分單
+              </button>
+            </div>
+
+            {calcResult && (
+              <div className="pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                {calcResult.success ? (
+                  <div className="bg-emerald-50 text-emerald-600 p-4 rounded-xl text-sm font-bold text-center border border-emerald-100 flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-5 h-5" /> {calcResult.success}
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-xs font-bold text-slate-500 mb-3 ml-1">建議結帳順序</h3>
+                    <div className="relative space-y-3">
+                      {/* 背景虛擬連接線 */}
+                      {(calcResult.steps.length > 1 || (calcResult.steps.length > 0 && calcResult.remainder > 0)) && (
+                        <div className="absolute left-[1.35rem] top-6 bottom-8 w-[2px] bg-slate-200 z-0"></div>
+                      )}
+
+                      {/* App 拆單步驟 (更新為單行排版) */}
+                      {calcResult.steps.map((step, idx) => (
+                        <div key={idx} className="relative z-10 bg-white p-3.5 rounded-xl shadow-sm border border-slate-100 flex items-center gap-3">
+                          <div className="w-8 h-8 shrink-0 bg-teal-500 text-white rounded-full flex items-center justify-center font-bold shadow-sm">{idx + 1}</div>
+                          <div className="flex-1 flex items-center justify-between gap-2">
+                            {/* 左：機構名稱 */}
+                            <div className="font-bold text-slate-800 text-[15px] flex items-center gap-1.5 w-[85px] shrink-0 truncate">
+                              {getMethodIcon(step.method)} <span className="truncate">{step.method}</span>
+                            </div>
+                            {/* 中：折抵優惠券 */}
+                            <div className="bg-blue-50 text-blue-600 px-2 py-1 rounded-md text-[10px] font-bold border border-blue-100 shadow-sm shrink-0">
+                              用券: -${step.discount}
+                            </div>
+                            {/* 右：總額 */}
+                            <div className="text-2xl font-black text-slate-800 text-right flex-1 truncate">
+                              ${step.spend}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* 獨立出來的尾數餘額步驟 (同步更新排版) */}
+                      {calcResult.remainder > 0 && (
+                        <div className="relative z-10 bg-slate-50 p-3.5 rounded-xl shadow-sm border border-slate-200 border-dashed flex items-center gap-3">
+                          <div className="w-8 h-8 shrink-0 bg-slate-400 text-white rounded-full flex items-center justify-center font-bold shadow-sm">
+                            !
+                          </div>
+                          <div className="flex-1 flex items-center justify-between gap-2">
+                            <div>
+                              <div className="font-bold text-slate-800 text-[15px]">
+                                餘額直接支付
+                              </div>
+                            </div>
+                            <div className="text-2xl font-black text-slate-800 text-right shrink-0">
+                              ${calcResult.remainder}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 第一階段：顯示預設的核銷按鈕 */}
+                    {calcResult.steps.length > 0 && !isConfirmingPayment && (
+                      <button
+                        onClick={() => { triggerVibration(20); setIsConfirmingPayment(true); }}
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm mt-5"
+                      >
+                        <CheckCircle2 className="w-5 h-5" /> 完成支付並自動核銷優惠
+                      </button>
+                    )}
+
+                    {/* 第二階段：防呆確認區塊 */}
+                    {calcResult.steps.length > 0 && isConfirmingPayment && (
+                      <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mt-5 animate-in fade-in zoom-in duration-200">
+                        <h3 className="text-[13px] font-bold text-emerald-800 text-center mb-3">確認已付款？優惠券將標記為已使用</h3>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => { triggerVibration(20); setIsConfirmingPayment(false); }}
+                            className="flex-1 bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50 active:scale-95 transition-all font-bold py-2.5 rounded-xl shadow-sm text-sm"
+                          >
+                            返回
+                          </button>
+                          <button
+                            onClick={executePayment}
+                            className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white active:scale-95 transition-all font-bold py-2.5 rounded-xl shadow-sm text-sm"
+                          >
+                            確定扣除
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'records' && (
           <div className="space-y-3">
             <div className="flex justify-between items-center bg-white p-1 rounded-full shadow-sm border border-slate-100">
@@ -351,7 +663,7 @@ export default function App() {
                     <div className="grid grid-cols-3 items-center mb-2 px-1">
                       
                       <div 
-                        className={`flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start select-none touch-manipulation ${isLocked ? 'opacity-40' : 'cursor-pointer active:opacity-50 transition-opacity'}`}
+                        className={`flex items-center gap-1.5 font-bold text-sm text-slate-700 justify-start select-none touch-manipulation ${isLocked ? 'opacity-60' : 'cursor-pointer active:opacity-50 transition-opacity'}`}
                         onPointerDown={(e) => {
                           if (isLocked) return;
                           if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -389,7 +701,7 @@ export default function App() {
                         else btnClass += AMOUNT_CLASSES[parsed.amount] || 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm';
 
                         if (isLocked) {
-                          btnClass += ' opacity-50 cursor-not-allowed';
+                          btnClass += ' opacity-70 cursor-not-allowed';
                         }
 
                         return (
@@ -494,7 +806,7 @@ export default function App() {
       </main>
 
       <nav className="shrink-0 absolute bottom-0 w-full max-w-md bg-white/90 backdrop-blur-xl border-t p-1.5 flex justify-around">
-        {[{ id: 'records', icon: List, label: '記錄' }, { id: 'institutions', icon: Wallet, label: '機構' }, { id: 'stats', icon: PieChartIcon, label: '統計' }].map(t => (
+        {[{ id: 'records', icon: List, label: '記錄' }, { id: 'calculator', icon: Calculator, label: '計算' }, { id: 'institutions', icon: Wallet, label: '機構' }, { id: 'stats', icon: PieChartIcon, label: '統計' }].map(t => (
           <button key={t.id} onClick={() => { triggerVibration(20); setActiveTab(t.id); }} className={`flex flex-col items-center gap-1 w-20 py-1 transition-all ${activeTab === t.id ? 'text-rose-600' : 'text-slate-400'}`}>
             <t.icon className="w-5 h-5" /><span className="text-[10px] font-bold">{t.label}</span>
           </button>
