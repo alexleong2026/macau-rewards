@@ -1,20 +1,20 @@
 {
-  "name": "澳門消費大獎賞 2026",
-  "short_name": "消費獎賞",
+  "name": "消費大獎賞智能助手",
+  "short_name": "大獎賞助手",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#f43f5e",
   "icons": [
     {
-      "src": "/vite.svg",
+      "src": "/icons/icon.png",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png"
     },
     {
-      "src": "/vite.svg",
+      "src": "/icons/icon.png",
       "sizes": "512x512",
-      "type": "image/svg+xml"
+      "type": "image/png"
     }
   ]
 }
