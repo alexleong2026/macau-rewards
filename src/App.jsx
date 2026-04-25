@@ -510,7 +510,6 @@ export default function App() {
           <div className="bg-white rounded-2xl p-5 space-y-4 shadow-sm border border-slate-100">
             <div className="mb-2">
               <h2 className="text-lg font-black text-slate-800">智能分單助手</h2>
-              <p className="text-xs font-medium text-slate-400 mt-0.5">完美解決多 App 拆單煩惱</p>
             </div>
 
             <div className="space-y-3">
@@ -541,7 +540,6 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <h3 className="text-xs font-bold text-slate-500 mb-3 ml-1">建議結帳順序</h3>
                     <div className="relative space-y-3">
                       {/* 背景虛擬連接線 */}
                       {(calcResult.steps.length > 1 || (calcResult.steps.length > 0 && calcResult.remainder > 0)) && (
@@ -551,17 +549,18 @@ export default function App() {
                       {/* App 拆單步驟 (更新為單行排版) */}
                       {calcResult.steps.map((step, idx) => (
                         <div key={idx} className="relative z-10 bg-white p-3.5 rounded-xl shadow-sm border border-slate-100 flex items-center gap-3">
-                          <div className="w-8 h-8 shrink-0 bg-teal-500 text-white rounded-full flex items-center justify-center font-bold shadow-sm">{idx + 1}</div>
+                          {/* 縮小圓形指示器 (w-8 h-8 改為 w-6 h-6, 調整字體大小) */}
+                          <div className="w-6 h-6 shrink-0 bg-teal-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-sm">{idx + 1}</div>
                           <div className="flex-1 flex items-center justify-between gap-1.5">
-                            {/* 左：機構名稱 (修窄寬度並微調字體，讓出更多空間) */}
-                            <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5 w-[76px] shrink-0 truncate">
-                              {getMethodIcon(step.method)} <span className="truncate">{step.method}</span>
+                            {/* 左：機構名稱 (移除寬度限制與截斷，確保四個字的銀行完整顯示) */}
+                            <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                              {getMethodIcon(step.method)} <span>{step.method}</span>
                             </div>
-                            {/* 中：折抵優惠券 */}
+                            {/* 中：折抵優惠券 (更改格式) */}
                             <div className="bg-blue-50 text-blue-600 px-1.5 py-1 rounded-md text-[10px] font-bold border border-blue-100 shadow-sm shrink-0">
-                              券: ${step.discount}
+                              券 {step.discount}
                             </div>
-                            {/* 右：總額 (移除 truncate 截斷，確保數字完整顯示) */}
+                            {/* 右：總額 */}
                             <div className="text-xl font-black text-slate-800 text-right flex-1 shrink-0 tracking-tight">
                               ${step.spend}
                             </div>
@@ -572,16 +571,17 @@ export default function App() {
                       {/* 獨立出來的尾數餘額步驟 (同步更新排版) */}
                       {calcResult.remainder > 0 && (
                         <div className="relative z-10 bg-slate-50 p-3.5 rounded-xl shadow-sm border border-slate-200 border-dashed flex items-center gap-3">
-                          <div className="w-8 h-8 shrink-0 bg-slate-400 text-white rounded-full flex items-center justify-center font-bold shadow-sm">
+                          {/* 將原本的灰色圓圈 (bg-slate-400) 改為紅色 (bg-red-500) */}
+                          <div className="w-6 h-6 shrink-0 bg-red-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-sm">
                             !
                           </div>
                           <div className="flex-1 flex items-center justify-between gap-1.5">
-                            <div className="truncate">
-                              <div className="font-bold text-slate-800 text-sm truncate">
+                            <div className="shrink-0 whitespace-nowrap">
+                              <div className="font-bold text-slate-800 text-sm">
                                 餘額直接支付
                               </div>
                             </div>
-                            {/* 總額 (移除 truncate 截斷，確保數字完整顯示) */}
+                            {/* 總額 */}
                             <div className="text-xl font-black text-slate-800 text-right shrink-0 tracking-tight">
                               ${calcResult.remainder}
                             </div>
